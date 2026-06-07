@@ -33,6 +33,7 @@ class PatientDetailSerializer(serializers.ModelSerializer):
             "sexe",
             "telephone",
             "adresse",
+            "historique_medical",
             "created_at",
             "updated_at",
         ]
@@ -51,6 +52,7 @@ class PatientCreateSerializer(serializers.ModelSerializer):
             "sexe",
             "telephone",
             "adresse",
+            "historique_medical",
         ]
 
     def validate_age(self, value):

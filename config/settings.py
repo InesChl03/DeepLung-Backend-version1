@@ -48,7 +48,8 @@ INSTALLED_APPS = [
     'accounts',
     'patients',
     'dossiers',
-    'analyse',
+    #'analyse',
+    'ctscan.apps.CtscanConfig',
     'rest_framework_simplejwt.token_blacklist',
 
     # tes apps
@@ -196,4 +197,4 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-TICNET_MODEL_PATH = BASE_DIR / "analyse" / "models" / "120.pth"
+#TICNET_MODEL_PATH = BASE_DIR / "analyse" / "models" / "120.pth"

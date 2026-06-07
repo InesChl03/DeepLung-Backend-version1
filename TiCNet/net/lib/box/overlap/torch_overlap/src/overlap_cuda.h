@@ -1,1 +1,0 @@
-int gpu_overlap(THFloatTensor * boxes1, THFloatTensor * boxes2, THFloatTensor * overlap);

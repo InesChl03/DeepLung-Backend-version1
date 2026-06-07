@@ -20,6 +20,11 @@ class Patient(models.Model):
     sexe      = models.CharField(max_length=1, choices=Sexe.choices, verbose_name="Sexe")
     telephone = models.CharField(max_length=20, verbose_name="N° Téléphone")
     adresse   = models.TextField(verbose_name="Adresse")
+    historique_medical = models.TextField(        # ← AJOUTER
+        blank=True,
+        default="",
+        verbose_name="Historique médical"
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

@@ -24,5 +24,7 @@ urlpatterns = [
     path('api/accounts/', include('accounts.urls')),
     path("api/patients/", include("patients.urls")),
     path("api/dossiers/", include("dossiers.urls")),
-    path("api/analyse/", include("analyse.urls")),
+    # path('api/test/', include('testt.urls')),
+    #path("api/analyse/", include("analyse.urls")),
+    path("api/ctscan/", include("ctscan.urls")),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

@@ -4,6 +4,8 @@ from .views import (
     CtScanListView,
     CtScanDetailView,
     CtScanParDossierView,
+    CtScanAnalyserDicomView,
+    CtScanSliceView,
 )
 
 urlpatterns = [
@@ -18,4 +20,6 @@ urlpatterns = [
 
     # Tous les scans d'un dossier
     path('dossier/<int:dossier_id>/',  CtScanParDossierView.as_view(),  name='ctscan-par-dossier'),
+    path('analyser-dicom/', CtScanAnalyserDicomView.as_view()) ,
+    path('<int:pk>/slice/<int:z>/', CtScanSliceView.as_view()),
 ]

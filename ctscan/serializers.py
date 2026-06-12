@@ -70,3 +70,9 @@ class CtScanUploadSerializer(serializers.Serializer):
     dossier_id  = serializers.IntegerField()
     fichier_mhd = serializers.FileField()
     fichier_raw = serializers.FileField()
+    
+    
+    
+class CtScanDicomUploadSerializer(serializers.Serializer):
+    dossier_id  = serializers.IntegerField()
+    fichier_zip = serializers.FileField()  # dossier DICOM zippé

@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 # ── Chemin checkpoint ─────────────────────────────────────────────────────────
 CHECKPOINT_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    'ticnet', 'results', 'ticnet', '2_fold', 'model', '120.pth'
+    'ticnet', 'results', 'ticnet', '1_fold', 'model', '114.pth'
 )
 
 # ── Singleton modèle ──────────────────────────────────────────────────────────

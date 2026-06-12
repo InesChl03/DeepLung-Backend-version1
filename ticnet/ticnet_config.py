@@ -101,6 +101,8 @@ net_config = {
     'return_intermediate_dec': True,
     'position_embedding': 'sine',
     'num_queries': 512,
+    'swin_window_size': 2,
+    'swin_embed_dim':   48,
 }
 
 

@@ -54,7 +54,7 @@ class DoctorLoginView(APIView):
     """
     POST /api/accounts/login/
     Body: {
-        "username": "dr.smith",
+        "email": "smith@gmail.com",
         "password": "motdepasse123"
     }
     """

@@ -527,7 +527,7 @@ import os
 import shutil
 import tempfile
 import zipfile
-
+from classification.classifier import classify_scan
 import numpy as np
 import SimpleITK as sitk
 from PIL import Image
@@ -556,26 +556,123 @@ MAX_UPLOAD_SIZE_BYTES = 2 * 1024 * 1024 * 1024
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
-
 def _save_scan_files(ctscan: CtScan, mhd_path: str, raw_path: str) -> None:
+    import re
     media_ctscan = os.path.join(settings.MEDIA_ROOT, 'ctscan')
     os.makedirs(media_ctscan, exist_ok=True)
 
     mhd_dest = os.path.join(media_ctscan, f'scan_{ctscan.id}.mhd')
     raw_dest  = os.path.join(media_ctscan, f'scan_{ctscan.id}.raw')
 
-    shutil.copy2(mhd_path, mhd_dest)
     shutil.copy2(raw_path, raw_dest)
 
-    # ✅ Forcer l'assignation correcte du chemin relatif
-    CtScan.objects.filter(pk=ctscan.pk).update(
-        fichier_mhd=f'ctscan/scan_{ctscan.id}.mhd',
-        fichier_raw=f'ctscan/scan_{ctscan.id}.raw',
+    with open(mhd_path, 'r') as f:
+        mhd_content = f.read()
+
+    mhd_content = re.sub(
+        r'ElementDataFile\s*=\s*.+',
+        f'ElementDataFile = scan_{ctscan.id}.raw',
+        mhd_content
     )
-    # Rafraîchir l'instance en mémoire
-    ctscan.refresh_from_db()
+
+    with open(mhd_dest, 'w') as f:
+        f.write(mhd_content)
+
+    logger.info(f"[_save_scan_files] .raw → {raw_dest}")
+    logger.info(f"[_save_scan_files] .mhd corrigé → {mhd_dest}")
+
+    # Mettre à jour UNIQUEMENT les chemins fichiers en base — sans refresh
+    # CtScan.objects.filter(pk=ctscan.pk).update(
+    #     fichier_mhd=f'ctscan/scan_{ctscan.id}.mhd',
+    #     fichier_raw=f'ctscan/scan_{ctscan.id}.raw',
+    # )
+    ctscan.fichier_mhd = f'ctscan/scan_{ctscan.id}.mhd'
+    ctscan.fichier_raw = f'ctscan/scan_{ctscan.id}.raw'
+    # ← refresh_from_db() supprimé d'ici
+# def _save_scan_files(ctscan: CtScan, mhd_path: str, raw_path: str) -> None:
+#     import re
+#     media_ctscan = os.path.join(settings.MEDIA_ROOT, 'ctscan')
+#     os.makedirs(media_ctscan, exist_ok=True)
+
+#     mhd_dest = os.path.join(media_ctscan, f'scan_{ctscan.id}.mhd')
+#     raw_dest  = os.path.join(media_ctscan, f'scan_{ctscan.id}.raw')
+
+#     # ── 1. Copier le .raw directement ────────────────────────────────────────
+#     shutil.copy2(raw_path, raw_dest)
+
+#     # ── 2. Réécrire le .mhd avec le bon nom du .raw ───────────────────────────
+#     # (shutil.copy2 copierait "ElementDataFile = scan.raw" — incorrect)
+#     with open(mhd_path, 'r') as f:
+#         mhd_content = f.read()
+
+#     mhd_content = re.sub(
+#         r'ElementDataFile\s*=\s*.+',
+#         f'ElementDataFile = scan_{ctscan.id}.raw',
+#         mhd_content
+#     )
+
+#     with open(mhd_dest, 'w') as f:
+#         f.write(mhd_content)
+
+#     logger.info(f"[_save_scan_files] .raw → {raw_dest}")
+#     logger.info(f"[_save_scan_files] .mhd corrigé → {mhd_dest}")
+
+#     # ── 3. Persister les chemins en base ──────────────────────────────────────
+#     CtScan.objects.filter(pk=ctscan.pk).update(
+#         fichier_mhd=f'ctscan/scan_{ctscan.id}.mhd',
+#         fichier_raw=f'ctscan/scan_{ctscan.id}.raw',
+#     )
+#     ctscan.refresh_from_db()
+# def _create_nodules(ctscan: CtScan, nodules_data: list) -> list:
+#     nodules_db = []
+#     for n in nodules_data:
+#         nodule = Nodule.objects.create(
+#             ctscan      = ctscan,
+#             rang        = n['rang'],
+#             monde_z     = n['monde']['z'],
+#             monde_y     = n['monde']['y'],
+#             monde_x     = n['monde']['x'],
+#             voxel_z     = n['voxel']['z'],
+#             voxel_y     = n['voxel']['y'],
+#             voxel_x     = n['voxel']['x'],
+#             diametre_mm = n['diametre_mm'],
+#             probabilite = n['probabilite'],
+#         )
+#         nodules_db.append(nodule)
+#     return nodules_db
 
 
+# def _apply_resultat_to_ctscan(ctscan: CtScan, resultat: dict) -> None:
+#     origin  = resultat['origin']
+#     spacing = resultat['spacing']
+
+#     ctscan.statut        = CtScan.Statut.TERMINE
+#     ctscan.origin_z      = origin[0]
+#     ctscan.origin_y      = origin[1]
+#     ctscan.origin_x      = origin[2]
+#     ctscan.spacing_z     = spacing[0]
+#     ctscan.spacing_y     = spacing[1]
+#     ctscan.spacing_x     = spacing[2]
+#     ctscan.ebox_z        = ebox[0]   # ← ajouter
+#     ctscan.ebox_y        = ebox[1]   # ← ajouter
+#     ctscan.ebox_x        = ebox[2]   # ← ajouter
+#     ctscan.duree_analyse = resultat['duree']
+def _apply_resultat_to_ctscan(ctscan: CtScan, resultat: dict) -> None:
+    origin  = resultat['origin']
+    spacing = resultat['spacing']
+    ebox    = resultat['ebox']      # ← ajouter cette ligne
+
+    ctscan.statut        = CtScan.Statut.TERMINE
+    ctscan.origin_z      = origin[0]
+    ctscan.origin_y      = origin[1]
+    ctscan.origin_x      = origin[2]
+    ctscan.spacing_z     = spacing[0]
+    ctscan.spacing_y     = spacing[1]
+    ctscan.spacing_x     = spacing[2]
+    ctscan.ebox_z        = ebox[0]  # ← ajouter
+    ctscan.ebox_y        = ebox[1]  # ← ajouter
+    ctscan.ebox_x        = ebox[2]  # ← ajouter
+    ctscan.duree_analyse = resultat['duree']
 def _create_nodules(ctscan: CtScan, nodules_data: list) -> list:
     nodules_db = []
     for n in nodules_data:
@@ -593,22 +690,6 @@ def _create_nodules(ctscan: CtScan, nodules_data: list) -> list:
         )
         nodules_db.append(nodule)
     return nodules_db
-
-
-def _apply_resultat_to_ctscan(ctscan: CtScan, resultat: dict) -> None:
-    origin  = resultat['origin']
-    spacing = resultat['spacing']
-
-    ctscan.statut        = CtScan.Statut.TERMINE
-    ctscan.origin_z      = origin[0]
-    ctscan.origin_y      = origin[1]
-    ctscan.origin_x      = origin[2]
-    ctscan.spacing_z     = spacing[0]
-    ctscan.spacing_y     = spacing[1]
-    ctscan.spacing_x     = spacing[2]
-    ctscan.duree_analyse = resultat['duree']
-
-
 def _find_dicom_folder(base_dir: str) -> str:
     dicom_extensions = ('.dcm', '.dicom')
     for root, dirs, files in os.walk(base_dir):
@@ -628,6 +709,112 @@ def _check_file_size(file_obj, label: str):
 
 
 # ── POST /api/ctscan/analyser/ ────────────────────────────────────────────────
+# class CtScanAnalyserView(APIView):
+#     permission_classes = [IsAuthenticated]
+
+#     def post(self, request):
+#         serializer = CtScanUploadSerializer(data={
+#             'dossier_id':  request.data.get('dossier_id'),
+#             'fichier_mhd': request.FILES.get('fichier_mhd'),
+#             'fichier_raw': request.FILES.get('fichier_raw'),
+#         })
+
+#         if not serializer.is_valid():
+#             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+#         data = serializer.validated_data
+
+#         try:
+#             _check_file_size(data['fichier_mhd'], 'fichier_mhd')
+#             _check_file_size(data['fichier_raw'], 'fichier_raw')
+#         except ValueError as e:
+#             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+#         dossier = get_object_or_404(
+#             Dossier,
+#             id=data['dossier_id'],
+#             patient__doctor__user=request.user,
+#         )
+
+#         # Créer le scan sans fichiers (affectés après analyse via _save_scan_files)
+#         ctscan = CtScan.objects.create(
+#             dossier = dossier,
+#             statut  = CtScan.Statut.EN_COURS,
+#         )
+#         logger.info(f"[CtScan #{ctscan.id}] Analyse MHD lancée pour dossier {dossier.id}")
+
+#         tmp_dir = tempfile.mkdtemp(prefix='ctscan_upload_')
+
+#         try:
+#             # ── 1. Écrire les fichiers uploadés sur disque ───────────────────
+#             mhd_filename = data['fichier_mhd'].name
+#             raw_filename = data['fichier_raw'].name
+
+#             mhd_path = os.path.join(tmp_dir, mhd_filename)
+#             raw_path = os.path.join(tmp_dir, raw_filename)
+
+#             data['fichier_mhd'].seek(0)
+#             data['fichier_raw'].seek(0)
+
+#             with open(mhd_path, 'wb') as f:
+#                 for chunk in data['fichier_mhd'].chunks():
+#                     f.write(chunk)
+#             with open(raw_path, 'wb') as f:
+#                 for chunk in data['fichier_raw'].chunks():
+#                     f.write(chunk)
+
+#             # ── 2. Pipeline preprocessing + inference ────────────────────────
+#             resultat = analyser_ctscan(mhd_path, raw_path)
+
+#             # ── 3. Appliquer les métadonnées sur l'instance ──────────────────
+#             _apply_resultat_to_ctscan(ctscan, resultat)
+
+#             # ── 4. Sauvegarder les fichiers + persister les chemins en base ──
+#             _save_scan_files(ctscan, mhd_path, raw_path)
+
+#             # ── 5. Sauvegarder les métadonnées (fichier_mhd/raw déjà en base)─
+#             # ctscan.save(update_fields=[
+#             #     'statut',
+#             #     'origin_z', 'origin_y', 'origin_x',
+#             #     'spacing_z', 'spacing_y', 'spacing_x',
+#             #     'ebox_z', 'ebox_y', 'ebox_x'
+#             #     'duree_analyse',
+#             # ])
+#             ctscan.save()
+
+# # Rafraîchir après le save pour avoir les chemins fichiers à jour
+#             ctscan.refresh_from_db()
+
+#             # ── 6. Créer les Nodules ──────────────────────────────────────────
+#             nodules_db = _create_nodules(ctscan, resultat['nodules'])
+
+#             logger.info(
+#                 f"[CtScan #{ctscan.id}] ✅ Terminé — "
+#                 f"{len(nodules_db)} nodules en {resultat['duree']}s"
+#             )
+
+#             return Response(
+#                 CtScanDetailSerializer(ctscan).data,
+#                 status=status.HTTP_201_CREATED,
+#             )
+
+#         except Exception as e:
+#             logger.exception(f"[CtScan #{ctscan.id}] ❌ Erreur analyse MHD")
+#             ctscan.statut         = CtScan.Statut.ERREUR
+#             ctscan.message_erreur = str(e)
+#             ctscan.save(update_fields=['statut', 'message_erreur'])
+#             return Response(
+#                 {
+#                     "error":     "Erreur lors de l'analyse TiCNet",
+#                     "detail":    str(e),
+#                     "ctscan_id": ctscan.id,
+#                 },
+#                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#             )
+
+#         finally:
+#             shutil.rmtree(tmp_dir, ignore_errors=True)
+
 class CtScanAnalyserView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -692,12 +879,10 @@ class CtScanAnalyserView(APIView):
             _save_scan_files(ctscan, mhd_path, raw_path)
 
             # ── 5. Sauvegarder les métadonnées (fichier_mhd/raw déjà en base)─
-            ctscan.save(update_fields=[
-                'statut',
-                'origin_z', 'origin_y', 'origin_x',
-                'spacing_z', 'spacing_y', 'spacing_x',
-                'duree_analyse',
-            ])
+            ctscan.save()
+
+            # Rafraîchir après le save pour avoir les chemins fichiers à jour
+            ctscan.refresh_from_db()
 
             # ── 6. Créer les Nodules ──────────────────────────────────────────
             nodules_db = _create_nodules(ctscan, resultat['nodules'])
@@ -706,6 +891,19 @@ class CtScanAnalyserView(APIView):
                 f"[CtScan #{ctscan.id}] ✅ Terminé — "
                 f"{len(nodules_db)} nodules en {resultat['duree']}s"
             )
+
+            # ── 7. Classification ResNet50-SWS (automatique, non bloquante) ──
+            # Le scan reste TERMINE même si la classification échoue —
+            # seule la classification sera absente de la réponse.
+            if nodules_db:
+                try:
+                    classify_scan(ctscan)
+                    logger.info(f"[CtScan #{ctscan.id}] ✅ Classification terminée")
+                except Exception as e:
+                    logger.error(
+                        f"[CtScan #{ctscan.id}] ⚠️ Classification échouée "
+                        f"(scan reste TERMINE) : {e}"
+                    )
 
             return Response(
                 CtScanDetailSerializer(ctscan).data,
@@ -728,8 +926,6 @@ class CtScanAnalyserView(APIView):
 
         finally:
             shutil.rmtree(tmp_dir, ignore_errors=True)
-
-
 # ── GET /api/ctscan/ ──────────────────────────────────────────────────────────
 class CtScanListView(APIView):
     permission_classes = [IsAuthenticated]
@@ -852,12 +1048,15 @@ class CtScanAnalyserDicomView(APIView):
             _save_scan_files(ctscan, mhd_path, raw_path)
 
             # ── 7. Sauvegarder les métadonnées (fichier_mhd/raw déjà en base)─
-            ctscan.save(update_fields=[
-                'statut',
-                'origin_z', 'origin_y', 'origin_x',
-                'spacing_z', 'spacing_y', 'spacing_x',
-                'duree_analyse',
-            ])
+            # ctscan.save(update_fields=[
+            #     'statut',
+            #     'origin_z', 'origin_y', 'origin_x',
+            #     'spacing_z', 'spacing_y', 'spacing_x',
+            #     'ebox_z', 'ebox_y', 'ebox_x',
+            #     'duree_analyse',
+            # ])
+            ctscan.save()                  # ← remplace ctscan.save(update_fields=[...])
+            ctscan.refresh_from_db()  
 
             # ── 8. Créer les Nodules ──────────────────────────────────────────
             nodules_db = _create_nodules(ctscan, resultat['nodules'])
@@ -866,6 +1065,17 @@ class CtScanAnalyserDicomView(APIView):
                 f"[CtScan #{ctscan.id}] ✅ DICOM terminé — "
                 f"{len(nodules_db)} nodules en {resultat['duree']}s"
             )
+
+            # ── 9. Classification ResNet50-SWS (automatique, non bloquante) ──
+            if nodules_db:
+                try:
+                    classify_scan(ctscan)
+                    logger.info(f"[CtScan #{ctscan.id}] ✅ Classification terminée")
+                except Exception as e:
+                    logger.error(
+                        f"[CtScan #{ctscan.id}] ⚠️ Classification échouée "
+                        f"(scan reste TERMINE) : {e}"
+                    )
 
             return Response(
                 CtScanDetailSerializer(ctscan).data,
@@ -891,12 +1101,105 @@ class CtScanAnalyserDicomView(APIView):
 
 
 # ── GET /api/ctscan/<id>/slice/<z>/ ──────────────────────────────────────────
+# class CtScanSliceView(APIView):
+#     permission_classes = [IsAuthenticated]
+
+#     WIN_MIN   = -1000
+#     WIN_MAX   =  400
+#     WIN_RANGE = WIN_MAX - WIN_MIN
+
+#     def get(self, request, pk, z):
+#         ctscan = get_object_or_404(
+#             CtScan,
+#             pk=pk,
+#             dossier__patient__doctor__user=request.user,
+#         )
+
+#         if not ctscan.fichier_mhd or not ctscan.fichier_mhd.name:
+#             return Response(
+#                 {"error": "fichier_mhd absent pour ce scan"},
+#                 status=status.HTTP_400_BAD_REQUEST,
+#             )
+
+#         mhd_path = ctscan.fichier_mhd.path
+#         if not os.path.isfile(mhd_path):
+#             return Response(
+#                 {"error": f"fichier .mhd introuvable sur disque : {mhd_path}"},
+#                 status=status.HTTP_404_NOT_FOUND,
+#             )
+
+#         # ── Valider l'index z ─────────────────────────────────────────────────
+#         try:
+#             z_idx = int(z)
+#         except ValueError:
+#             return Response(
+#                 {"error": "Index de slice invalide, un entier est attendu"},
+#                 status=status.HTTP_400_BAD_REQUEST,
+#             )
+
+#         # ── Charger le volume ─────────────────────────────────────────────────
+#         try:
+#             image  = sitk.ReadImage(mhd_path)
+#             volume = sitk.GetArrayFromImage(image)
+#         except Exception as e:
+#             logger.exception(f"[CtScan #{ctscan.id}] Erreur lecture .mhd")
+#             return Response(
+#                 {"error": f"Erreur lecture .mhd : {str(e)}"},
+#                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#             )
+
+#         # ── Extraire la slice selon la vue demandée ───────────────────────────
+#         view = request.GET.get('view', 'axial')
+
+#         axis_map = {
+#             'axial':    (0, lambda v, i: v[i]),
+#             'coronal':  (1, lambda v, i: v[:, i, :]),
+#             'sagittal': (2, lambda v, i: v[:, :, i]),
+#         }
+
+#         if view not in axis_map:
+#             return Response(
+#                 {"error": "Paramètre 'view' invalide. Valeurs acceptées : axial, coronal, sagittal"},
+#                 status=status.HTTP_400_BAD_REQUEST,
+#             )
+
+#         axis, extractor = axis_map[view]
+#         total = volume.shape[axis]
+
+#         if not (0 <= z_idx < total):
+#             return Response(
+#                 {"error": f"Index {z_idx} hors limites (0–{total - 1})"},
+#                 status=status.HTTP_400_BAD_REQUEST,
+#             )
+
+#         slice_arr = extractor(volume, z_idx)
+
+#         # ── Fenêtrage pulmonaire + encodage PNG ───────────────────────────────
+#         slice_arr = np.clip(slice_arr, self.WIN_MIN, self.WIN_MAX)
+#         slice_arr = ((slice_arr - self.WIN_MIN) / self.WIN_RANGE * 255).astype(np.uint8)
+
+#         img = Image.fromarray(slice_arr).convert("RGB")
+#         buf = io.BytesIO()
+#         img.save(buf, format="PNG")
+#         b64 = base64.b64encode(buf.getvalue()).decode()
+
+#         return Response({
+#             "slice_index":  z_idx,
+#             "total_slices": total,
+#             "width":        slice_arr.shape[1],
+#             "height":       slice_arr.shape[0],
+#             "view":         view,
+#             "image_b64":    b64,
+#         }) 
 class CtScanSliceView(APIView):
     permission_classes = [IsAuthenticated]
-
-    WIN_MIN   = -1000
-    WIN_MAX   =  400
-    WIN_RANGE = WIN_MAX - WIN_MIN
+    WINDOWS = {
+        'pulmonaire': (-1500,  500),
+        'nodule':     (-800,   800),
+        'mediastin':  (-175,   275),
+        'standard':   (-600,  1600),
+        'os':         (-500,  1500),
+    }
 
     def get(self, request, pk, z):
         ctscan = get_object_or_404(
@@ -914,23 +1217,26 @@ class CtScanSliceView(APIView):
         mhd_path = ctscan.fichier_mhd.path
         if not os.path.isfile(mhd_path):
             return Response(
-                {"error": f"fichier .mhd introuvable sur disque : {mhd_path}"},
+                {"error": f"fichier .mhd introuvable : {mhd_path}"},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        # ── Valider l'index z ─────────────────────────────────────────────────
-        try:
-            z_idx = int(z)
-        except ValueError:
-            return Response(
-                {"error": "Index de slice invalide, un entier est attendu"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        z_preprocessed    = int(z)
+        ebox_z            = float(ctscan.ebox_z)    if ctscan.ebox_z    is not None else 0.0
+        spacing_z         = float(ctscan.spacing_z) if ctscan.spacing_z is not None else 1.0
+        SPACING_RESAMPLED = 1.0
 
-        # ── Charger le volume ─────────────────────────────────────────────────
+        z_original = int((z_preprocessed + ebox_z) * (SPACING_RESAMPLED / spacing_z))
+
+        logger.info(
+            f"[SliceView] voxel_z préprocessé={z_preprocessed} "
+            f"ebox_z={ebox_z} spacing_z={spacing_z} "
+            f"→ z_original={z_original}"
+        )
+
         try:
             image  = sitk.ReadImage(mhd_path)
-            volume = sitk.GetArrayFromImage(image)
+            volume = sitk.GetArrayFromImage(image)  # (D, H, W)
         except Exception as e:
             logger.exception(f"[CtScan #{ctscan.id}] Erreur lecture .mhd")
             return Response(
@@ -938,7 +1244,6 @@ class CtScanSliceView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-        # ── Extraire la slice selon la vue demandée ───────────────────────────
         view = request.GET.get('view', 'axial')
 
         axis_map = {
@@ -949,24 +1254,31 @@ class CtScanSliceView(APIView):
 
         if view not in axis_map:
             return Response(
-                {"error": "Paramètre 'view' invalide. Valeurs acceptées : axial, coronal, sagittal"},
+                {"error": "view invalide (axial|coronal|sagittal)"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         axis, extractor = axis_map[view]
-        total = volume.shape[axis]
+        total           = volume.shape[axis]
 
-        if not (0 <= z_idx < total):
+        if not (0 <= z_original < total):
             return Response(
-                {"error": f"Index {z_idx} hors limites (0–{total - 1})"},
+                {
+                    "error":  f"Index converti {z_original} hors limites (0–{total-1})",
+                    "detail": f"voxel_z={z_preprocessed} ebox_z={ebox_z} spacing_z={spacing_z}",
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        slice_arr = extractor(volume, z_idx)
+        slice_arr = extractor(volume, z_original)
 
-        # ── Fenêtrage pulmonaire + encodage PNG ───────────────────────────────
-        slice_arr = np.clip(slice_arr, self.WIN_MIN, self.WIN_MAX)
-        slice_arr = ((slice_arr - self.WIN_MIN) / self.WIN_RANGE * 255).astype(np.uint8)
+        # ── Fenêtrage dynamique + encodage PNG ────────────────────────────────
+        window              = request.GET.get('window', 'nodule')
+        win_min, win_max    = self.WINDOWS.get(window, (-800, 800))
+        win_range           = win_max - win_min
+
+        slice_arr = np.clip(slice_arr, win_min, win_max)
+        slice_arr = ((slice_arr - win_min) / win_range * 255).astype(np.uint8)
 
         img = Image.fromarray(slice_arr).convert("RGB")
         buf = io.BytesIO()
@@ -974,10 +1286,12 @@ class CtScanSliceView(APIView):
         b64 = base64.b64encode(buf.getvalue()).decode()
 
         return Response({
-            "slice_index":  z_idx,
-            "total_slices": total,
-            "width":        slice_arr.shape[1],
-            "height":       slice_arr.shape[0],
-            "view":         view,
-            "image_b64":    b64,
+            "slice_index":        z_original,
+            "slice_preprocessed": z_preprocessed,
+            "total_slices":       total,
+            "width":              slice_arr.shape[1],
+            "height":             slice_arr.shape[0],
+            "view":               view,
+            "window":             window,
+            "image_b64":          b64,
         })

@@ -131,7 +131,7 @@ def preprocess(mhd_path):
 
 
 # ── Inference ─────────────────────────────────────────────────────────────────
-def run_inference(seg_img, origin, ebox, seuil_prob=0.8):
+def run_inference(seg_img, origin, ebox, seuil_prob=0.90):
     """
     Lance l'inference TiCNet et retourne la liste des nodules détectés.
 

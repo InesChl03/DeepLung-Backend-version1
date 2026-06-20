@@ -27,4 +27,6 @@ urlpatterns = [
     # path('api/test/', include('testt.urls')),
     #path("api/analyse/", include("analyse.urls")),
     path("api/ctscan/", include("ctscan.urls")),
+    path("api/classification/", include("classification.urls")),
+    path("api/segmentation/", include("segmentation.urls")),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

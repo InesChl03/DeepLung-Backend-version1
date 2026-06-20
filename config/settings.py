@@ -26,7 +26,7 @@ DEBUG = config('DEBUG', cast=bool)
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
+ALLOWED_HOSTS = ['*']
 
 
 # Application definition
@@ -49,6 +49,8 @@ INSTALLED_APPS = [
     'patients',
     'dossiers',
     #'analyse',
+    'classification',
+    'segmentation',
     'ctscan.apps.CtscanConfig',
     'rest_framework_simplejwt.token_blacklist',
 
@@ -164,7 +166,8 @@ SIMPLE_JWT = {
 
 # --- CORS ---
 CORS_ALLOWED_ORIGINS = [
-    'http://localhost:3000',  # React dev server
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
 ]
 # REST_FRAMEWORK = {
 #     "DEFAULT_AUTHENTICATION_CLASSES": [
@@ -197,4 +200,27 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-#TICNET_MODEL_PATH = BASE_DIR / "analyse" / "models" / "120.pth"
+CLASSIFICATION_MODEL_PATH = "/home/inas/lung_cancer_backend/classification/LUNA16_SWS_v11_1_resnet50_SWS.pt"
+SEGMENTATION_MODEL_PATH = "/home/inas/lung_cancer_backend/segmentation/seg_best.pth"
+
+TICNET_MODEL_PATH = "/home/inas/lung_cancer_backend/segmentation/114.pth"
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
+    'loggers': {
+        'segmentation': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': True,
+        },
+    },
+}

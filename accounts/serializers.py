@@ -98,19 +98,52 @@ class DoctorProfileSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+# class DoctorLoginSerializer(serializers.Serializer):
+#     username = serializers.CharField()
+#     password = serializers.CharField(write_only=True)
+
+#     def validate(self, data):
+#         from django.contrib.auth import authenticate
+#         user = authenticate(username=data["username"], password=data["password"])
+#         if not user:
+#             raise serializers.ValidationError("Invalid credentials.")
+#         if not user.is_active:
+#             raise serializers.ValidationError("Account disabled.")
+#         if not user.is_doctor():
+#             raise serializers.ValidationError("Not a doctor account.")
+#         data["user"] = user
+#         return data
+
+#     def get_tokens(self, user):
+#         refresh = RefreshToken.for_user(user)
+#         return {
+#             "refresh": str(refresh),
+#             "access":  str(refresh.access_token),
+#         }
+
 class DoctorLoginSerializer(serializers.Serializer):
-    username = serializers.CharField()
+    email    = serializers.EmailField()          # ← email au lieu de username
     password = serializers.CharField(write_only=True)
 
     def validate(self, data):
         from django.contrib.auth import authenticate
-        user = authenticate(username=data["username"], password=data["password"])
+        from .models import User
+
+        # Chercher l'user par email d'abord
+        try:
+            user_obj = User.objects.get(email=data["email"])
+        except User.DoesNotExist:
+            raise serializers.ValidationError("Identifiants invalides.")
+
+        # Puis authentifier avec son username
+        user = authenticate(username=user_obj.username, password=data["password"])
         if not user:
-            raise serializers.ValidationError("Invalid credentials.")
+            raise serializers.ValidationError("Identifiants invalides.")
         if not user.is_active:
-            raise serializers.ValidationError("Account disabled.")
+            raise serializers.ValidationError("Compte désactivé.")
         if not user.is_doctor():
-            raise serializers.ValidationError("Not a doctor account.")
+            raise serializers.ValidationError("Pas un compte médecin.")
+
         data["user"] = user
         return data
 
@@ -120,8 +153,6 @@ class DoctorLoginSerializer(serializers.Serializer):
             "refresh": str(refresh),
             "access":  str(refresh.access_token),
         }
-
-
 
 class ChangePasswordSerializer(serializers.Serializer):
     old_password     = serializers.CharField(write_only=True)

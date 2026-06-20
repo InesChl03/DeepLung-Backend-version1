@@ -43,6 +43,10 @@ class CtScan(models.Model):
     spacing_z   = models.FloatField(null=True, blank=True)
     spacing_y   = models.FloatField(null=True, blank=True)
     spacing_x   = models.FloatField(null=True, blank=True)
+        ##################################
+    ebox_z = models.FloatField(null=True, blank=True)
+    ebox_y = models.FloatField(null=True, blank=True)
+    ebox_x = models.FloatField(null=True, blank=True)
 
     message_erreur = models.TextField(blank=True, verbose_name="Message d'erreur")
     duree_analyse  = models.FloatField(null=True, blank=True, verbose_name="Durée (secondes)")
